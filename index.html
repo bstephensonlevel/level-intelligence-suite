@@ -4212,28 +4212,25 @@
             proofIdx = idx;
         }
 
-        /* Sync dots to native scroll */
+        /* Sync dots to native scroll in real time */
         (function () {
             var wrap = document.querySelector('.lis-proof-track-wrap');
             if (!wrap) return;
-            var t;
+            var cards = Array.prototype.slice.call(wrap.querySelectorAll('.lis-proof-card'));
+            var dots = Array.prototype.slice.call(document.querySelectorAll('.lis-proof-dot'));
             wrap.addEventListener('scroll', function () {
-                clearTimeout(t);
-                t = setTimeout(function () {
-                    var cards = wrap.querySelectorAll('.lis-proof-card');
-                    var scrollLeft = wrap.scrollLeft;
-                    var closest = 0, minDist = Infinity;
-                    cards.forEach(function (c, i) {
-                        var dist = Math.abs(c.offsetLeft - scrollLeft);
-                        if (dist < minDist) { minDist = dist; closest = i; }
+                var scrollLeft = wrap.scrollLeft;
+                var closest = 0, minDist = Infinity;
+                cards.forEach(function (c, i) {
+                    var dist = Math.abs(c.offsetLeft - scrollLeft);
+                    if (dist < minDist) { minDist = dist; closest = i; }
+                });
+                if (closest !== proofIdx) {
+                    proofIdx = closest;
+                    dots.forEach(function (d, i) {
+                        d.classList.toggle('active', i === closest);
                     });
-                    if (closest !== proofIdx) {
-                        proofIdx = closest;
-                        document.querySelectorAll('.lis-proof-dot').forEach(function (d, i) {
-                            d.classList.toggle('active', i === closest);
-                        });
-                    }
-                }, 50);
+                }
             }, { passive: true });
         })();
 
