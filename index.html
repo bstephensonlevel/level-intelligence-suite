@@ -398,19 +398,25 @@
 
         #lis-suite .lis-proof-track-wrap {
             position: relative;
-            overflow: hidden;
+            overflow-x: scroll;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        #lis-suite .lis-proof-track-wrap::-webkit-scrollbar {
+            display: none;
         }
 
         #lis-suite .lis-proof-track {
             display: flex;
             gap: 20px;
-            transition: transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            will-change: transform;
-            touch-action: pan-y;
         }
 
         #lis-suite .lis-proof-card {
             flex: 0 0 calc(100% - 0px);
+            scroll-snap-align: start;
             padding: 20px 16px;
             background: var(--cardBg);
             border-radius: 12px;
@@ -4194,14 +4200,11 @@
         var proofTotalSlides = 4;
 
         function scrollProofTo(idx) {
-            var track = document.getElementById('lis-proof-track');
+            var wrap = document.querySelector('.lis-proof-track-wrap');
+            var cards = wrap ? wrap.querySelectorAll('.lis-proof-card') : [];
             var dots = document.querySelectorAll('.lis-proof-dot');
-            if (!track) return;
-            var card = track.querySelector('.lis-proof-card');
-            if (!card) return;
-            var cardWidth = card.offsetWidth + 20;
-            track.style.transition = 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-            track.style.transform = 'translateX(-' + (idx * cardWidth) + 'px)';
+            if (!wrap || !cards[idx]) return;
+            wrap.scrollTo({ left: cards[idx].offsetLeft, behavior: 'smooth' });
             dots.forEach(function (d, i) {
                 d.classList.toggle('active', i === idx);
                 d.setAttribute('aria-label', 'View slide ' + (i + 1) + ' of ' + proofTotalSlides);
@@ -4209,56 +4212,29 @@
             proofIdx = idx;
         }
 
-        /* Touch swipe — live drag + fluid snap */
+        /* Sync dots to native scroll */
         (function () {
-            var track = document.getElementById('lis-proof-track');
-            if (!track) return;
-            var startX = 0, startY = 0, baseOffset = 0, dragging = false, lockAxis = null;
-            var THRESHOLD = 40;
-
-            function cardWidth() {
-                var c = track.querySelector('.lis-proof-card');
-                return c ? c.offsetWidth + 20 : 0;
-            }
-
-            track.addEventListener('touchstart', function (e) {
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                baseOffset = -(proofIdx * cardWidth());
-                dragging = true;
-                lockAxis = null;
-                track.style.transition = 'none';
+            var wrap = document.querySelector('.lis-proof-track-wrap');
+            if (!wrap) return;
+            var t;
+            wrap.addEventListener('scroll', function () {
+                clearTimeout(t);
+                t = setTimeout(function () {
+                    var cards = wrap.querySelectorAll('.lis-proof-card');
+                    var scrollLeft = wrap.scrollLeft;
+                    var closest = 0, minDist = Infinity;
+                    cards.forEach(function (c, i) {
+                        var dist = Math.abs(c.offsetLeft - scrollLeft);
+                        if (dist < minDist) { minDist = dist; closest = i; }
+                    });
+                    if (closest !== proofIdx) {
+                        proofIdx = closest;
+                        document.querySelectorAll('.lis-proof-dot').forEach(function (d, i) {
+                            d.classList.toggle('active', i === closest);
+                        });
+                    }
+                }, 50);
             }, { passive: true });
-
-            track.addEventListener('touchmove', function (e) {
-                if (!dragging) return;
-                var dx = e.touches[0].clientX - startX;
-                var dy = e.touches[0].clientY - startY;
-                if (!lockAxis) {
-                    lockAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-                }
-                if (lockAxis !== 'x') return;
-                var atStart = proofIdx === 0 && dx > 0;
-                var atEnd = proofIdx === proofTotalSlides - 1 && dx < 0;
-                var offset = baseOffset + (atStart || atEnd ? dx * 0.2 : dx);
-                track.style.transform = 'translateX(' + offset + 'px)';
-            }, { passive: true });
-
-            function endDrag(e) {
-                if (!dragging) return;
-                dragging = false;
-                var dx = (e.changedTouches ? e.changedTouches[0].clientX : startX) - startX;
-                if (lockAxis === 'x' && Math.abs(dx) > THRESHOLD) {
-                    scrollProofTo(dx < 0
-                        ? Math.min(proofIdx + 1, proofTotalSlides - 1)
-                        : Math.max(proofIdx - 1, 0));
-                } else {
-                    scrollProofTo(proofIdx);
-                }
-            }
-
-            track.addEventListener('touchend', endDrag, { passive: true });
-            track.addEventListener('touchcancel', endDrag, { passive: true });
         })();
 
         /* FIX #4: Carousel keyboard navigation — ArrowLeft / ArrowRight when focus is on a dot */
