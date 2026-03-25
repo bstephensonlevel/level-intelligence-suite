@@ -398,12 +398,15 @@
 
         #lis-suite .lis-proof-track-wrap {
             position: relative;
+            overflow: hidden;
         }
 
         #lis-suite .lis-proof-track {
             display: flex;
             gap: 20px;
-            transition: transform 0.5s ease;
+            transition: transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            will-change: transform;
+            touch-action: pan-y;
         }
 
         #lis-suite .lis-proof-card {
@@ -4196,8 +4199,8 @@
             if (!track) return;
             var card = track.querySelector('.lis-proof-card');
             if (!card) return;
-            var gap = 20;
-            var cardWidth = card.offsetWidth + gap;
+            var cardWidth = card.offsetWidth + 20;
+            track.style.transition = 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
             track.style.transform = 'translateX(-' + (idx * cardWidth) + 'px)';
             dots.forEach(function (d, i) {
                 d.classList.toggle('active', i === idx);
@@ -4206,25 +4209,56 @@
             proofIdx = idx;
         }
 
-        /* Touch swipe support for proof carousel */
+        /* Touch swipe — live drag + fluid snap */
         (function () {
             var track = document.getElementById('lis-proof-track');
             if (!track) return;
-            var startX = 0;
-            var threshold = 50;
+            var startX = 0, startY = 0, baseOffset = 0, dragging = false, lockAxis = null;
+            var THRESHOLD = 40;
+
+            function cardWidth() {
+                var c = track.querySelector('.lis-proof-card');
+                return c ? c.offsetWidth + 20 : 0;
+            }
+
             track.addEventListener('touchstart', function (e) {
                 startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                baseOffset = -(proofIdx * cardWidth());
+                dragging = true;
+                lockAxis = null;
+                track.style.transition = 'none';
             }, { passive: true });
-            track.addEventListener('touchend', function (e) {
-                var diff = startX - e.changedTouches[0].clientX;
-                if (Math.abs(diff) > threshold) {
-                    if (diff > 0) {
-                        scrollProofTo((proofIdx + 1) % proofTotalSlides);
-                    } else {
-                        scrollProofTo((proofIdx - 1 + proofTotalSlides) % proofTotalSlides);
-                    }
+
+            track.addEventListener('touchmove', function (e) {
+                if (!dragging) return;
+                var dx = e.touches[0].clientX - startX;
+                var dy = e.touches[0].clientY - startY;
+                if (!lockAxis) {
+                    lockAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
                 }
+                if (lockAxis !== 'x') return;
+                var atStart = proofIdx === 0 && dx > 0;
+                var atEnd = proofIdx === proofTotalSlides - 1 && dx < 0;
+                var offset = baseOffset + (atStart || atEnd ? dx * 0.2 : dx);
+                track.style.transform = 'translateX(' + offset + 'px)';
             }, { passive: true });
+
+            function endDrag(e) {
+                if (!dragging) return;
+                dragging = false;
+                var dx = (e.changedTouches ? e.changedTouches[0].clientX : startX) - startX;
+                if (lockAxis === 'x' && Math.abs(dx) > THRESHOLD) {
+                    scrollProofTo(dx < 0
+                        ? Math.min(proofIdx + 1, proofTotalSlides - 1)
+                        : Math.max(proofIdx - 1, 0));
+                } else {
+                    scrollProofTo(proofIdx);
+                }
+            }
+
+            track.addEventListener('touchend', endDrag, { passive: true });
+            track.addEventListener('touchcancel', endDrag, { passive: true });
         })();
 
         /* FIX #4: Carousel keyboard navigation — ArrowLeft / ArrowRight when focus is on a dot */
